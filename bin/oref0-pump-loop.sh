@@ -31,6 +31,7 @@ fi
 
 # main pump-loop
 main() {
+    check_duty_cycle
     prep
     if ! overtemp; then
         echo && echo "Starting oref0-pump-loop at $(date) with $upto30s second wait_for_silence:"
@@ -117,6 +118,82 @@ function fail {
     exit 1
 }
 
+# The function "check_duty_cycle" checks if the loop has to run and it returns 0 if so.
+# It exits the script with code 0 otherwise.
+# The desicion is based on the time since last *successful* loop.
+# !Note duty cycle times are set in seconds.
+#
+# Additionally it may start an "emergency action" if enabled.
+# Possible actions are usb power cycling or reboot the system.
+# The EMERGENCY_ACTION variable sets the allowable time between successful loops.
+# If no loop has completed in that time, it performs the enabled actions.
+# !Note to enable a emergency action use 0 to enable and 1 to disable
+#
+# The intention is two fold:
+# First the battery consumption is reduced (Pump and Pi) if the loop runs less often.
+# This is most dramatic for Enlite CGM, where wait_for_bg can't be used.
+# Secondly, if Carelink USB is used with Enlite, and wait_for_silence can't be used, this
+# prevents the loop from disrupting the communication between the pump and enlite sensors.
+#
+# Use DUTY_CYCLE=0 (default) if you don't want to limit the loop
+#
+# Suggestion for Carelink USB users are
+# DUTY_CYCLE=120
+# EMERGENCY_ACTION=900
+# REBOOT_ENABLE=0        #0=true
+# USB_RESET_ENABLE=0    #0=true
+#
+# Default is DUTY_CYCLE=0 to disable this feature.
+DUTY_CYCLE=${DUTY_CYCLE:-0}
+
+EMERGENCY_ACTION=${EMERGENCY_ACTION:-900}
+REBOOT_ENABLE=${REBOOT_ENABLE:-1}          #0=true
+USB_RESET_ENABLE=${USB_RESET_ENABLE:-1}    #0=true
+
+function check_duty_cycle {
+    if [ "$DUTY_CYCLE" -gt "0" ]; then
+        if [ -e /tmp/pump_loop_success ]; then
+            DIFF_SECONDS=$(expr $(date +%s) - $(stat -c %Y /tmp/pump_loop_success))
+
+            if ([ $USB_RESET_ENABLE ] || [ $REBOOT_ENABLE ]) && [ "$DIFF_SECONDS" -gt "$EMERGENCY_ACTION" ]; then
+                if [ $USB_RESET_ENABLE ]; then
+                    USB_RESET_DIFF=$EMERGENCY_ACTION
+                    if [ -e /tmp/usp_power_cycled ]; then
+                        USB_RESET_DIFF=$(expr $(date +%s) - $(stat -c %Y /tmp/usp_power_cycled))
+                    fi
+
+                    if [ "$USB_RESET_DIFF" -gt "$EMERGENCY_ACTION" ]; then
+                        # file is old --> power-cycling is long time ago (most probably not this round) --> power-cycling
+                        echo -n "$DIFF_SECONDS (of $DUTY_CYCLE) since last run --> trying to reset USB... "
+                        /usr/local/bin/oref0-reset-usb 2>&3 >&4
+                        touch /tmp/usp_power_cycled
+                        echo " done. --> start new cycle."
+                        return 0 #return to loop routine
+                    fi
+                fi
+                # if usb reset doesn't help or is not enabled --> reboot system
+                if [ $REBOOT_ENABLE ]; then
+                    echo "$DIFF_SECONDS (of $DUTY_CYCLE) since last run --> rebooting."
+                    sudo shutdown -r now
+                    exit 0
+                fi
+            elif [ "$DIFF_SECONDS" -gt "$DUTY_CYCLE" ]; then
+                echo "$DIFF_SECONDS (of $DUTY_CYCLE) since last run --> start new cycle."
+                return 0
+            else
+                echo "$DIFF_SECONDS (of $DUTY_CYCLE) since last run --> stop now."
+                exit 0
+            fi
+        else
+            echo "/tmp/pump_loop_success does not exist; create it to start the loop duty cycle."
+            # if pump_loop_success does not exist, use the system uptime
+            touch -d "$(cat /proc/uptime | awk '{print $1}') seconds ago" /tmp/pump_loop_success
+            return 0
+        fi
+    fi
+}
+
+
 function overtemp {
     # check for CPU temperature above 85°C
     # special temperature check for raspberry pi
@@ -135,7 +212,7 @@ function overtemp {
 
 function smb_reservoir_before {
     # Refresh reservoir.json and pumphistory.json
-    try_fail refresh_pumphistory_and_meal
+    retry_fail refresh_pumphistory_and_meal
     try_fail cp monitor/reservoir.json monitor/lastreservoir.json
     echo -n "Listening for $upto10s s silence: " && wait_for_silence $upto10s
     retry_fail check_clock
@@ -199,6 +276,7 @@ function smb_suggest {
 }
 
 function determine_basal {
+    cat monitor/meal.json
     if ( grep -q 12 settings/model.json ); then
       oref0-determine-basal monitor/iob.json monitor/temp_basal.json monitor/glucose.json settings/profile.json settings/autosens.json monitor/meal.json --reservoir monitor/reservoir.json > enact/smb-suggested.json
     else
@@ -274,7 +352,7 @@ function smb_verify_suggested {
         echo Pumphistory/temp mismatch: retrying
         return 1
     fi
-    if jq -e -r .deliverAt enact/smb-suggested.json; then
+    if [ -s enact/smb-suggested.json ] && jq -e -r .deliverAt enact/smb-suggested.json; then
         echo -n "Checking deliverAt: " && jq -r .deliverAt enact/smb-suggested.json | tr -d '\n' \
         && echo -n " is within 1m of current time: " && date \
         && (( $(bc <<< "$(date +%s -d $(jq -r .deliverAt enact/smb-suggested.json | tr -d '\n')) - $(date +%s)") > -60 )) \
@@ -303,7 +381,7 @@ function smb_verify_status {
         false
     fi \
     && if grep -q 12 monitor/status.json; then
-	echo -n "x12 model detected."
+    echo -n "x12 model detected."
         true
     fi
 }
@@ -316,7 +394,7 @@ function smb_bolus {
     && if (grep -q '"units":' enact/smb-suggested.json 2>&3); then
         # press ESC four times on the pump to exit Bolus Wizard before SMBing, to help prevent A52 errors
         echo -n "Sending ESC ESC ESC ESC to exit any open menus before SMBing "
-        retry_return mdt -f internal button esc esc esc esc 2>&3 \
+        try_return mdt -f internal button esc esc esc esc 2>&3 \
         && echo -n "and bolusing " && jq .units enact/smb-suggested.json | tr -d '\n' && echo " units" \
         && ( try_return mdt bolus enact/smb-suggested.json 2>&3 && jq '.  + {"received": true}' enact/smb-suggested.json > enact/bolused.json ) \
         && rm -rf enact/smb-suggested.json
@@ -343,7 +421,7 @@ function refresh_after_bolus_or_enact {
         fi
         # refresh profile if >5m old to give SMB a chance to deliver
         refresh_profile 3
-        refresh_pumphistory_and_meal
+        refresh_pumphistory_and_meal || return 1
         # TODO: check that last pumphistory record is newer than last bolus and refresh again if not
         calculate_iob && determine_basal 2>&3 \
         && cp -up enact/smb-suggested.json enact/suggested.json \
@@ -468,7 +546,7 @@ function preflight {
 # reset radio, init world wide pump (if applicable), mmtune, and wait_for_silence 60 if no signal
 function mmtune {
     if grep "carelink" pump.ini 2>&1 >/dev/null; then
-	echo "using carelink; skipping mmtune"
+    echo "using carelink; skipping mmtune"
         return
     fi
 
@@ -479,7 +557,7 @@ function mmtune {
     echo -n "mmtune: " && mmtune_Go >&3 2>&3
     #Read and zero pad best frequency from mmtune, and store/set it so Go commands can use it,
     #but only if it's not the default frequency
-    if ! $(jq -e .usedDefault monitor/mmtune.json); then
+    if ! $([ -s monitor/mmtune.json ] && jq -e .usedDefault monitor/mmtune.json); then
       freq=`jq -e .setFreq monitor/mmtune.json | tr -d "."`
       while [ ${#freq} -ne 9 ];
         do
@@ -525,7 +603,7 @@ function maybe_mmtune {
 # listen for $1 seconds of silence (no other rigs talking to pump) before continuing
 function wait_for_silence {
     if grep "carelink" pump.ini 2>&1 >/dev/null; then
-	echo "using carelink; not waiting for silence"
+    echo "using carelink; not waiting for silence"
         return
     fi
     if [ -z $1 ]; then
@@ -561,19 +639,39 @@ function refresh_pumphistory_and_meal {
          test $(cat monitor/status.json | json suspended) == true || \
          test $(cat monitor/status.json | json bolusing) == false ) \
          || { echo; cat monitor/status.json | jq -c -C .; return 1; }
-    retry_return monitor_pump || return 1
+    try_return invoke_pumphistory_etc || return 1
+    try_return invoke_reservoir_etc || return 1
     echo -n "meal.json "
-    retry_return oref0-meal monitor/pumphistory-24h-zoned.json settings/profile.json monitor/clock-zoned.json monitor/glucose.json settings/basal_profile.json monitor/carbhistory.json > monitor/meal.json || return 1
-    echo "refreshed"
+    if ! retry_return oref0-meal monitor/pumphistory-24h-zoned.json settings/profile.json monitor/clock-zoned.json monitor/glucose.json settings/basal_profile.json monitor/carbhistory.json > monitor/meal.json.new ; then
+        echo; echo "Couldn't calculate COB"
+        return 1
+    fi
+    try_return check_cp_meal || return 1
+    echo -n "refreshed: "
+    cat monitor/meal.json
 }
 
-function monitor_pump {
-    retry_return invoke_pumphistory_etc || return 1
-    retry_return invoke_reservoir_etc || return 1
+function check_cp_meal {
+    if ! [ -s monitor/meal.json.new ]; then
+        echo meal.json.new not found
+        return 1
+    fi
+    if grep "Could not parse input data" monitor/meal.json.new; then
+        cat monitor/meal.json
+        return 1
+    fi
+    if jq -e .carbs monitor/meal.json.new >&3; then
+        cp monitor/meal.json.new monitor/meal.json
+    else
+        echo meal.json.new invalid
+        return 1
+    fi
 }
+
 
 function calculate_iob {
-    oref0-calculate-iob monitor/pumphistory-24h-zoned.json settings/profile.json monitor/clock-zoned.json settings/autosens.json > monitor/iob.json || { echo; echo "Couldn't calculate IOB"; fail "$@"; }
+    oref0-calculate-iob monitor/pumphistory-24h-zoned.json settings/profile.json monitor/clock-zoned.json settings/autosens.json > monitor/iob.json.new || { echo; echo "Couldn't calculate IOB"; fail "$@"; }
+    [ -s monitor/iob.json.new ] && jq -e .[0].iob monitor/iob.json.new >&3 && cp monitor/iob.json.new monitor/iob.json || { echo; echo "Couldn't copy IOB"; fail "$@"; }
 }
 
 function invoke_pumphistory_etc {
@@ -761,7 +859,8 @@ function glucose-fresh {
     else
         touch -d "$(date -R -d @$(jq .[0].date/1000 monitor/glucose.json))" monitor/glucose.json 2>&3
     fi
-    if (! ls /tmp/pump_loop_completed >&4 ); then
+    if (! [ -e /tmp/pump_loop_completed ] ); then
+        echo "First loop: not waiting"
         return 0;
     elif (find monitor/ -newer /tmp/pump_loop_completed | grep -q glucose.json); then
         echo glucose.json newer than pump_loop_completed
@@ -892,14 +991,14 @@ function read_carb_ratios() {
 
 retry_fail() {
     "$@" || { echo Retry 1 of $*; "$@"; } \
-    || { wait_for_silence 2; echo Retry 2 of $*; "$@"; } \
-    || { wait_for_silence 5; echo Retry 3 of $*; "$@"; } \
+    || { wait_for_silence $upto10s; echo Retry 2 of $*; "$@"; } \
+    || { wait_for_silence $upto30s; echo Retry 3 of $*; "$@"; } \
     || { echo "Couldn't $*"; fail "$@"; }
 }
 retry_return() {
     "$@" || { echo Retry 1 of $*; "$@"; } \
-    || { wait_for_silence 2; echo Retry 2 of $*; "$@"; } \
-    || { wait_for_silence 5; echo Retry 3 of $*; "$@"; } \
+    || { wait_for_silence $upto10s; echo Retry 2 of $*; "$@"; } \
+    || { wait_for_silence $upto30s; echo Retry 3 of $*; "$@"; } \
     || { echo "Couldn't $* - continuing"; return 1; }
 }
 try_fail() {
