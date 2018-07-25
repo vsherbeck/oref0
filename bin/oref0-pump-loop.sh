@@ -502,7 +502,7 @@ function if_mdt_get_bg {
         #due to sometimes the pump is not in a state to give this command repeat until it completes
         #"decocare.errors.DataTransferCorruptionError: Page size too short"
 	rm monitor/cgm-mm-glucosedirty.json
-        cgmupdate -f monitor/cgm-mm-glucosedirty.json -u -b 30h -k 48h 2>&1
+	cgmupdate -f monitor/cgm-mm-glucosedirty.json -u -b 30h -k 48h 2>&3 >&4
 	#n=0
         #until [ $n -ge 3 ]; do
         #    openaps report invoke monitor/cgm-mm-glucosedirty.json 2>&3 >&4 && break
@@ -533,6 +533,7 @@ function if_mdt_get_bg {
         fi
     fi
 }
+#NOTE: we may need this again with cgmupdate, depending on how fast the loop runs
 # TODO: remove if still unused at next oref0 release
 #function wait_for_mdt_get_bg {
 #    # This might not really be needed since very seldom does a loop take less time to run than CGM Data takes to refresh.
@@ -557,7 +558,7 @@ function mdt_get_bg {
     && cp -pu cgm/cgm-glucose.json cgm/glucose.json \
     && cp -pu cgm/glucose.json monitor/glucose.json \
     && echo -n MDT New cgm data reformat \
-    #&& openaps report invoke monitor/glucose.json 2>&3 >&4 \
+    #&& openaps report invoke monitor/glucose.json 2>&3 >&4 \ #already TZ'd by Go, so we don't need this
     && openaps report invoke nightscout/glucose.json 2>&3 >&4 \
     && echo ted
 }
