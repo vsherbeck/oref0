@@ -552,15 +552,17 @@ function if_mdt_get_bg {
 
 function mdt_get_bg {
     openaps report invoke monitor/cgm-mm-glucosetrend.json 2>&3 >&4 \
-    && openaps report invoke cgm/cgm-glucose.json 2>&3 >&4 \
-    && grep -q glucose cgm/cgm-glucose.json \
-    && echo MDT CGM data retrieved \
-    && cp -pu cgm/cgm-glucose.json cgm/glucose.json \
-    && cp -pu cgm/glucose.json monitor/glucose.json \
-    && echo -n MDT New cgm data reformat \
+    cp -pu monitor/cgm-mm-glucosetrend.json monitor/glucose.json \
+    #removing this stuff because I don't think we need it anymore...
+    #&& openaps report invoke cgm/cgm-glucose.json 2>&3 >&4 \
+    #&& grep -q glucose cgm/cgm-glucose.json \
+    #&& echo MDT CGM data retrieved \
+    #&& cp -pu cgm/cgm-glucose.json cgm/glucose.json \
+    #&& cp -pu cgm/glucose.json monitor/glucose.json \
+    #&& echo -n MDT New cgm data reformat \
     #&& openaps report invoke monitor/glucose.json 2>&3 >&4 \ #already TZ'd by Go, so we don't need this
     && openaps report invoke nightscout/glucose.json 2>&3 >&4 \
-    && echo ted
+    && echo MDT New cgm data retreived and reformatted
 }
 # make sure we can talk to the pump and get a valid model number
 function preflight {
