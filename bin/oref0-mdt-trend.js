@@ -30,7 +30,7 @@ if (!module.parent) {
 
   var cwd = process.cwd();
   var glucose_data = require(cwd + '/' + glucose_input);
-  glucose_data.sort(function (a, b) { return Date.parse(a.date) - Date.parse(b.date) });
+  glucose_data.sort(function (a, b) { return a.date - b.date });
 
   filtered = glucose_data.filter(function(x) { return x.name == "GlucoseSensorData" });
 
@@ -46,7 +46,7 @@ if (!module.parent) {
   for (var i = 0; i < filtered.length; ++i) {
 	var record = filtered[i];
 	var output_record = glucose_data[findRecord(glucose_data, record._tell, record.date)];
-	var current_date = Date.parse(record.date);
+	var current_date = record.date;
 
 	var delta = 0; //record.sgv - last_glucose;
 	var delta_time = 0;
