@@ -1147,7 +1147,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo "Installing socat and ntp..."
         apt-get install -y socat ntp
         echo "Installing openaps-menu..."
-        cd $HOME/src && git clone git://github.com/openaps/openaps-menu.git || (cd openaps-menu && git checkout master && git pull)
+        cd $HOME/src && git clone git://github.com/cluckj/openaps-menu.git || (cd openaps-menu && git checkout jon-dev && git pull)
         cd $HOME/src/openaps-menu && sudo npm install
         cp $HOME/src/openaps-menu/openaps-menu.service /etc/systemd/system/ && systemctl enable openaps-menu
     fi
