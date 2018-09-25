@@ -1194,6 +1194,12 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo "i2c-dev" > /etc/modules-load.d/i2c.conf
         echo "Installing socat and ntp..."
         apt-get install -y socat ntp
+	echo "Installing pi-buttons..."
+	cd $HOME/src &&	git clone git://github.com/bnielsen1965/pi-buttons.git
+	echo "Make and install pi-buttons..."
+	cd pi-buttons/src
+	make &&	sudo make install && sudo make install_service
+	systemctl enable pi-buttons && systemctl restart pi-buttons
         echo "Installing openaps-menu..."
         cd $HOME/src && git clone git://github.com/cluckj/openaps-menu.git || (cd openaps-menu && git checkout jon-dev && git pull)
         cd $HOME/src/openaps-menu && sudo npm install
