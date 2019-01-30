@@ -1245,11 +1245,15 @@ if prompt_yn "" N; then
 	make &&	sudo make install && sudo make install_service
 	systemctl enable pi-buttons && systemctl restart pi-buttons
         echo "Installing openaps-menu..."
+<<<<<<< HEAD
 	if  [[ "$ttyport" =~ "spidev0.1" ]]; then
             cd $HOME/src && git clone git://github.com/cluckj/openaps-menu.git && git checkout radiofruit || (cd openaps-menu && git checkout radiofruit && git pull)
 	else
             cd $HOME/src && git clone git://github.com/cluckj/openaps-menu.git || (cd openaps-menu && git checkout pi-buttons && git pull)
 	fi
+=======
+        cd $HOME/src && git clone git://github.com/openaps/openaps-menu.git || (cd openaps-menu && git checkout master && git pull)
+>>>>>>> parent of 415c2c8e... personalizations for Jon's rig
         cd $HOME/src/openaps-menu && sudo npm install
         cp $HOME/src/openaps-menu/openaps-menu.service /etc/systemd/system/ && systemctl enable openaps-menu
     fi
