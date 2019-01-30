@@ -362,6 +362,9 @@ if [[ -z "$DIR" || -z "$serial" ]]; then
                 echocolor "Configuring Explorer Board HAT. "
                 ttyport=/dev/spidev0.0
             fi
+	elif ! prompt_yn "Are you using a Radiofruit RFM69HCW Bonnet?" Y; then
+	    echocolor "Configuring Radiofruit RFM69HCW Bonnet. Please compile pump communications library from source when prompted below." #There's probably a better way to do this...
+	    ttyport=/dev/spidev0.1
         else
             if is_edison; then
                 echocolor "Yay! Configuring for Edison with Explorer Board. "
@@ -380,13 +383,15 @@ if [[ -z "$DIR" || -z "$serial" ]]; then
       if [[ $REPLY =~ ^[Ss]$ ]]; then
         buildgofromsource=true
         echo "Building Go pump binaries from source"
-        read -p "What type of radio do you use? [1] for cc1101 [2] for CC1110 or CC1111 [3] for RFM69HCW radio module 1/[2]/3 " -r
+        read -p "What type of radio do you use? [1] for cc1101 [2] for CC1110 or CC1111 [3] for RFM69HCW radio module [4] for Radiofruit Bonnet 1/[2]/3/4 " -r
         if [[ $REPLY =~ ^[1]$ ]]; then
           radiotags="cc1101"
         elif [[ $REPLY =~ ^[2]$ ]]; then
           radiotags="cc111x"
         elif [[ $REPLY =~ ^[3]$ ]]; then
           radiotags="rfm69"
+	elif [[ $REPLY =~ ^[4]$ ]]; then
+	  radiotags="rfm69 radiofruit"
         else
           radiotags="cc111x"
         fi
@@ -1219,7 +1224,7 @@ if prompt_yn "" N; then
     echo
 
     #Check to see if Explorer HAT is present, and install all necessary stuff
-    if grep -qa "Explorer HAT" /proc/device-tree/hat/product &> /dev/null || [[ "$ttyport" =~ "spidev0.0" ]]; then
+    if grep -qa "Explorer HAT" /proc/device-tree/hat/product &> /dev/null || [[ "$ttyport" =~ "spidev0.0" ]] || [[ "$ttyport" =~ "spidev0.1" ]]; then
         echo "Looks like you're using an Explorer HAT!"
         echo "Making sure SPI is enabled..."
         if ! ( grep -q i2c-dev /etc/modules-load.d/i2c.conf && egrep "^dtparam=i2c1=on" /boot/config.txt ); then
@@ -1240,7 +1245,11 @@ if prompt_yn "" N; then
 	make &&	sudo make install && sudo make install_service
 	systemctl enable pi-buttons && systemctl restart pi-buttons
         echo "Installing openaps-menu..."
-        cd $HOME/src && git clone git://github.com/cluckj/openaps-menu.git || (cd openaps-menu && git checkout jon-dev && git pull)
+	if  [[ "$ttyport" =~ "spidev0.1" ]]; then
+            cd $HOME/src && git clone git://github.com/cluckj/openaps-menu.git && git checkout radiofruit || (cd openaps-menu && git checkout radiofruit && git pull)
+	else
+            cd $HOME/src && git clone git://github.com/cluckj/openaps-menu.git || (cd openaps-menu && git checkout pi-buttons && git pull)
+	fi
         cd $HOME/src/openaps-menu && sudo npm install
         cp $HOME/src/openaps-menu/openaps-menu.service /etc/systemd/system/ && systemctl enable openaps-menu
     fi
