@@ -104,14 +104,15 @@ test-ns-status () {
 
 test-autotune-core () {
     # Run autotune-core and capture output
-    ../bin/oref0-autotune-core.js autotune.data.json profile.json profile.json 2>stderr_output 1>stdout_output
+    ../bin/oref0-autotune-core.js autotune.data.json profile.json pumpprofile.json 2>stderr_output 1>stdout_output
 
     ERROR_LINE_COUNT=$( cat stderr_output | wc -l )
     ERROR_LINES=$( cat stderr_output )
     cat stderr_output | grep -q CRTotalCarbs || fail_test "oref0-autotune-core didn't contain expected stderr output"
 
     # Make sure output has accurate carb ratio data
-    cat stdout_output | jq .carb_ratio | grep -q 22.142 || fail_test "oref0-autotune-core didn't contain expected carb_ratio output"
+    cat stdout_output | jq .dia | grep -q 7 || fail_test "oref0-autotune-core didn't contain expected dia output"
+    cat stdout_output | jq .insulinPeakTime | grep -q 85 || fail_test "oref0-autotune-core didn't contain expected insulinPeakTime output"
 
     # If we made it here, the test passed
     echo "oref0-autotune-core test passed"
@@ -219,7 +220,7 @@ test-detect-sensitivity () {
     cat stderr_output | grep -q "ISF adjusted from 100 to 100" || fail_test "oref0-detect-sensitivity error: \n$ERROR_LINES"
 
     # Make sure output has ratio
-    cat stdout_output | jq ".ratio" | grep -q "1" || fail_test "oref0-determine-sensitivity did not report correct sensitivity"
+    cat stdout_output | jq ".ratio" | grep -q "1" || fail_test "oref0-detect-sensitivity did not report correct sensitivity"
 
     # Run detect-sensitivity with carbhistory and capture output
     ../bin/oref0-detect-sensitivity.js glucose.json pumphistory_zoned.json insulin_sensitivities.json basal_profile.json profile.json carbhistory.json 2>stderr_output 1>stdout_output
@@ -229,7 +230,7 @@ test-detect-sensitivity () {
     cat stderr_output | grep -q "ISF adjusted from 100 to 100" || fail_test "oref0-detect-sensitivity error: \n$ERROR_LINES"
 
     # Make sure output has ratio
-    cat stdout_output | jq ".ratio" | grep -q "1" || fail_test "oref0-determine-sensitivity did not report correct sensitivity"
+    cat stdout_output | jq ".ratio" | grep -q "1" || fail_test "oref0-detect-sensitivity did not report correct sensitivity"
 
     # Run oref0-detect-sensitivity with carbhistory and temptargets and capture output
     ../bin/oref0-detect-sensitivity.js glucose.json pumphistory_zoned.json insulin_sensitivities.json basal_profile.json profile.json carbhistory.json temptargets.json 2>stderr_output 1>stdout_output
@@ -239,7 +240,7 @@ test-detect-sensitivity () {
     cat stderr_output | grep -q "ISF adjusted from 100 to 100" || fail_test "oref0-detect-sensitivity error: \n$ERROR_LINES"
 
     # Make sure output has ratio
-    cat stdout_output | jq ".ratio" | grep -q "1" || fail_test "oref0-determine-sensitivity did not report correct sensitivity"
+    cat stdout_output | jq ".ratio" | grep -q "1" || fail_test "oref0-detect-sensitivity did not report correct sensitivity"
 
     # If we made it here, the test passed
     echo "oref0-detect-sensitivites test passed"
@@ -257,7 +258,7 @@ test-determine-basal () {
     cat stdout_output | jq ".reason" | grep -q "BG data is too old" || fail_test "oref0-determine-basal did not report correct reason"
 
     # Run determine-basal with options
-    ../bin/oref0-determine-basal.js --reservoir reservoir.json iob.json --currentTime "2018-09-05T09:44:11-05:00" temp_basal.json glucose.json --auto-sens autosens.json profile.json meal.json 2>stderr_output 1>stdout_output
+    ../bin/oref0-determine-basal.js --reservoir reservoir.json iob.json --currentTime "2018-09-05T09:44:11-05:00" temp_basal.json glucose.json --auto-sens autosens.json profile.json --meal meal.json 2>stderr_output 1>stdout_output
 
     # Make sure stderr output contains expected time
     ERROR_LINES=$( cat stderr_output )
@@ -265,16 +266,6 @@ test-determine-basal () {
 
     # Make sure output has reason
     cat stdout_output | jq ".reason" | grep -q "BG data is too old" || fail_test "oref0-determine-basal with options did not report correct reason"
-
-    # Run determine-basal with alternate methods of arguments
-    ../bin/oref0-determine-basal.js iob.json temp_basal.json glucose.json profile.json autosens.json meal.json 2>stderr_output 1>stdout_output
-
-    # Make sure stderr output contains expected time
-    ERROR_LINES=$( cat stderr_output )
-    cat stderr_output | jq .time | grep -q "2018-09-05T14:44:11.000Z" || fail_test "oref0-determine-basal with alternate options error: \n$ERROR_LINES"
-
-    # Make sure output has reason
-    cat stdout_output | jq ".reason" | grep -q "BG data is too old" || fail_test "oref0-determine-basal with alternate options did not report correct reason"
 
     # If we made it here, the test passed
     echo "oref0-determine-basal test passed"
@@ -543,6 +534,111 @@ EOT
    "half_basal_exercise_target": 160,
    "high_temptarget_raises_sensitivity": false,
    "insulinPeakTime": 85,
+   "isfProfile": {
+      "first": 1,
+      "sensitivities": [
+         {
+            "endOffset": 1440,
+            "i": 0,
+            "offset": 0,
+            "sensitivity": 100,
+            "start": "00:00:00",
+            "x": 0
+         }
+      ],
+      "units": "mg/dL",
+      "user_preferred_units": "mg/dL"
+   },
+   "low_temptarget_lowers_sensitivity": false,
+   "maxCOB": 120,
+   "maxSMBBasalMinutes": 30,
+   "max_basal": 2.8,
+   "max_bg": 110,
+   "max_daily_basal": 0.75,
+   "max_daily_safety_multiplier": 3,
+   "max_iob": 7,
+   "min_5m_carbimpact": 8,
+   "min_bg": 110,
+   "model": "723",
+   "offline_hotspot": false,
+   "out_units": "mg/dL",
+   "remainingCarbsCap": 90,
+   "remainingCarbsFraction": 1,
+   "resistance_lowers_target": false,
+   "rewind_resets_autosens": true,
+   "sens": 100,
+   "sensitivity_raises_target": true,
+   "suspend_zeros_iob": true,
+   "unsuspend_if_no_temp": false,
+   "useCustomPeakTime": true,
+   "wide_bg_target_range": false
+}
+EOT
+
+    # Make a dummy pumpprofile.json
+    cat >pumpprofile.json <<EOT
+{
+   "A52_risk_enable": false,
+   "adv_target_adjustments": false,
+   "allowSMB_with_high_temptarget": false,
+   "autosens_max": 1.2,
+   "autosens_min": 0.8,
+   "autotune_isf_adjustmentFraction": 0,
+   "basalprofile": [
+      {
+         "i": 0,
+         "minutes": 0,
+         "rate": 0.63,
+         "start": "00:00:00"
+      }
+   ],
+   "bg_targets": {
+      "first": 0,
+      "targets": [
+         {
+            "high": 110,
+            "i": 0,
+            "low": 110,
+            "max_bg": 110,
+            "min_bg": 110,
+            "offset": 0,
+            "start": "00:00:00",
+            "x": 0
+         }
+      ],
+      "units": "mg/dL",
+      "user_preferred_units": "mg/dL"
+   },
+   "bolussnooze_dia_divisor": 2,
+   "carb_ratio": 22.142,
+   "carb_ratios": {
+      "first": 1,
+      "schedule": [
+         {
+            "i": 0,
+            "offset": 0,
+            "ratio": 20,
+            "start": "00:00:00",
+            "x": 0
+         }
+      ],
+      "units": "grams"
+   },
+   "carbsReqThreshold": 1,
+   "csf": 3.815,
+   "current_basal": 0.65,
+   "current_basal_safety_multiplier": 4,
+   "curve": "rapid-acting",
+   "dia": 8,
+   "enableSMB_after_carbs": false,
+   "enableSMB_always": true,
+   "enableSMB_with_COB": true,
+   "enableSMB_with_temptarget": true,
+   "enableUAM": true,
+   "exercise_mode": false,
+   "half_basal_exercise_target": 160,
+   "high_temptarget_raises_sensitivity": false,
+   "insulinPeakTime": 90,
    "isfProfile": {
       "first": 1,
       "sensitivities": [
