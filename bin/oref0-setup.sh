@@ -1237,10 +1237,13 @@ if prompt_yn "" N; then
         apt-get install -y socat ntp
 	echo "Installing pi-buttons..."
 	systemctl stop pi-buttons
-	cd $HOME/src &&	git clone git://github.com/bnielsen1965/pi-buttons.git
+	cd $HOME/src &&	git clone git://github.com/cluckj/pi-buttons.git
 	echo "Make and install pi-buttons..."
-	cd pi-buttons/src
-	make &&	sudo make install && sudo make install_service
+	cd pi-buttons
+	if  [[ "$ttyport" =~ "spidev0.1" ]]; then
+	    git checkout radiofruit
+	fi
+	cd src && make && sudo make install && sudo make install_service
 	systemctl enable pi-buttons && systemctl restart pi-buttons
         echo "Installing openaps-menu..."
 	if  [[ "$ttyport" =~ "spidev0.1" ]]; then
