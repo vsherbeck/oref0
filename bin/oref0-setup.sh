@@ -312,7 +312,7 @@ if [[ -z "$DIR" || -z "$serial" ]]; then
         echocolor "Ok, you'll be using a 512 or 712 pump. Got it. "
         echo
     else
-        echocolor "You're using a different model pump. Got it."
+        echocolor "You're using a different model pump. Got it. "
     fi
 
     echo "What kind of CGM would you like to configure for offline use? Options are:"
@@ -344,53 +344,55 @@ if [[ -z "$DIR" || -z "$serial" ]]; then
 
     if grep -qa "Explorer HAT" /proc/device-tree/hat/product &>/dev/null ; then
         echocolor "Explorer Board HAT detected. "
+	echocolor "Configuring for Explorer Board HAT. "
         ttyport=/dev/spidev0.0
     else
-        if ! prompt_yn "Are you using an Explorer Board?" Y; then
-            if ! prompt_yn "Are you using an Explorer HAT?" Y; then
-                echo 'Are you using mmeowlink (i.e. with a TI stick)? If not, press enter. If so, paste your full port address: it looks like "/dev/ttySOMETHING" without the quotes.'
-                prompt_and_validate ttyport "What is your TTY port?" validate_ttyport
-                echocolor -n "Ok, "
-                if [[ -z "$ttyport" ]]; then
-                    echo -n Carelink
-                else
-                    echo -n TTY $ttyport
-                fi
-                echocolor " it is. "
-                echo
-            else
-                echocolor "Configuring Explorer Board HAT. "
-                ttyport=/dev/spidev0.0
-            fi
+	echo "What kind of hardware setup do you have? Options are:"
+	echo "[1]: Pi with Explorer HAT"
+	echo " 2 : Edison with Explorer Board"
+	echo " 3 : Pi with Radiofruit Bonnet"
+	echo " 4 : Other radio (rfm69, cc11xx)"
+	read -p "Please enter the number for your hardware configuration: " -r
+	if [[ $REPLY =~ ^[2]$ ]]; then
+          if is_edison; then
+              echocolor "Yay! Configuring for Edison with Explorer Board. "
+              ttyport=/dev/spidev5.1
+	  else
+              echo "Hmm, you don't seem to be using an Edison. "
+              prompt_and_validate ttyport "What is your TTY port? (/dev/ttySOMETHING)" validate_ttyport
+              echocolor "Ok, we'll try TTY $ttyport then. "
+	  fi
+	elif [[ $REPLY =~ ^[3]$ ]]; then
+	    echocolor "Configuring Radiofruit RFM69HCW Bonnet. "
+            ttyport=/dev/spidev0.1
+        elif [[ $REPLY =~ ^[4]$ ]]; then
+              prompt_and_validate ttyport "What is your TTY port? (/dev/ttySOMETHING)" validate_ttyport
+              echocolor "Ok, we'll try TTY $ttyport then. "
         else
-            if is_edison; then
-                echocolor "Yay! Configuring for Edison with Explorer Board. "
-                ttyport=/dev/spidev5.1
-            else
-                echo "Hmm, you don't seem to be using an Edison."
-                prompt_and_validate ttyport "What is your TTY port? (/dev/ttySOMETHING)" validate_ttyport
-                echocolor "Ok, we'll try TTY $ttyport then."
-            fi
-            echo
+          echocolor "Configuring Explorer Board HAT. "
+          ttyport=/dev/spidev0.0
         fi
     fi
+
     read -p "Would you like to [D]ownload released precompiled Go pump communication library or install an [U]nofficial (possibly untested) version.[D]/U " -r
     if [[ $REPLY =~ ^[Uu]$ ]]; then
       read -p "You could either build the Medtronic library from [S]ource, or type the version tag you would like to use, example 'v2018.08.08' [S]/<version> " -r
       if [[ $REPLY =~ ^[Ss]$ ]]; then
         buildgofromsource=true
         echo "Building Go pump binaries from source"
-        read -p "What type of radio do you use? [1] for cc1101 [2] for CC1110 or CC1111 [3] for RFM69HCW radio module 1/[2]/3 " -r
+        read -p "What type of radio do you use? [1] for cc1101 [2] for CC1110 or CC1111 [3] for RFM69HCW(Walrus) radio module [4] for Radiofruit Bonnet 1/[2]/3/4 " -r
         if [[ $REPLY =~ ^[1]$ ]]; then
           radiotags="cc1101"
         elif [[ $REPLY =~ ^[2]$ ]]; then
           radiotags="cc111x"
         elif [[ $REPLY =~ ^[3]$ ]]; then
-          radiotags="rfm69"
+          radiotags="rfm69 walrus"
+	elif [[ $REPLY =~ ^[4]$ ]]; then
+	  radiotags="rfm69"
         else
           radiotags="cc111x"
         fi
-        echo "Building Go pump binaries from source with " + radiotags + " tags."
+        echo "Building Go pump binaries from source with $radiotags tags."
       else
         ecc1medtronicversion="tags/$REPLY"
         echo "Will use https://github.com/ecc1/medtronic/releases/$REPLY."
@@ -1219,7 +1221,7 @@ if prompt_yn "" N; then
     echo
 
     #Check to see if Explorer HAT is present, and install all necessary stuff
-    if grep -qa "Explorer HAT" /proc/device-tree/hat/product &> /dev/null || [[ "$ttyport" =~ "spidev0.0" ]]; then
+    if grep -qa "Explorer HAT" /proc/device-tree/hat/product &> /dev/null || [[ "$ttyport" =~ "spidev0.0" ]] || [[ "$ttyport" =~ "spidev0.1" ]]; then
         echo "Looks like you're using an Explorer HAT!"
         echo "Making sure SPI is enabled..."
         if ! ( grep -q i2c-dev /etc/modules-load.d/i2c.conf && egrep "^dtparam=i2c1=on" /boot/config.txt ); then
@@ -1233,8 +1235,19 @@ if prompt_yn "" N; then
         echo "i2c-dev" > /etc/modules-load.d/i2c.conf
         echo "Installing socat and ntp..."
         apt-get install -y socat ntp
+	echo "Installing pi-buttons..."
+	systemctl stop pi-buttons
+	cd $HOME/src &&	git clone git://github.com/bnielsen1965/pi-buttons.git
+	echo "Make and install pi-buttons..."
+	cd pi-buttons/src
+	make &&	sudo make install && sudo make install_service
+	systemctl enable pi-buttons && systemctl restart pi-buttons
         echo "Installing openaps-menu..."
-        cd $HOME/src && git clone git://github.com/openaps/openaps-menu.git || (cd openaps-menu && git checkout master && git pull)
+	if  [[ "$ttyport" =~ "spidev0.1" ]]; then
+            cd $HOME/src && git clone git://github.com/cluckj/openaps-menu.git && git checkout radiofruit || (cd openaps-menu && git checkout radiofruit && git pull)
+	else
+            cd $HOME/src && git clone git://github.com/cluckj/openaps-menu.git || (cd openaps-menu && git checkout pi-buttons && git pull)
+	fi
         cd $HOME/src/openaps-menu && sudo npm install
         cp $HOME/src/openaps-menu/openaps-menu.service /etc/systemd/system/ && systemctl enable openaps-menu
     fi
@@ -1292,13 +1305,7 @@ if prompt_yn "" N; then
 
     if [[ "$ttyport" =~ "spidev" ]]; then
         if $buildgofromsource; then
-          #go get -u -v github.com/ecc1/cc111x || die "Couldn't go get cc111x"
-          go get -u -v -tags $radiotags github.com/ecc1/medtronic/... || die "Couldn't go get medtronic"
-          #cd $HOME/go/src/github.com/ecc1/medtronic/cmd
-          #cd mdt && go install -tags cc111x || die "Couldn't go install mdt"
-          #cd ../mmtune && go install -tags cc111x || die "Couldn't go install mmtune"
-          #cd ../pumphistory && go install -tags cc111x || die "Couldn't go install pumphistory"
-          #cd ../listen && go install -tags cc111x || die "Couldn't go install listen"
+          go get -u -v -tags "$radiotags" github.com/ecc1/medtronic/... || die "Couldn't go get medtronic"
           ln -sf $HOME/go/src/github.com/ecc1/medtronic/cmd/pumphistory/openaps.jq $directory/ || die "Couldn't softlink openaps.jq"
         else
           arch=arm-spi
