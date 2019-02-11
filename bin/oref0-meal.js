@@ -87,7 +87,7 @@ if (!module.parent) {
       basalprofile_data = temp;
     }
 
-    inputs = {
+    var inputs = {
         history: pumphistory_data
     , profile: profile_data
     , basalprofile: basalprofile_data
