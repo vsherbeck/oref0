@@ -59,8 +59,8 @@ if (!module.parent) {
 
 
         if (typeof profile.isfProfile === "undefined") {
-            for (var prop in profile[0].store) {
-                var profilename = prop;
+            for (prop in profile[0].store) {
+                profilename = prop;
             }
             //console.error(profilename);
             //console.error(profile[0].store[profilename].basal);
@@ -89,7 +89,7 @@ if (!module.parent) {
                 "autosens_max": 2.0,
                 "autosens_min": 0.5
             };
-            inputs = { "basals": profile.basalprofile };
+            var inputs = { "basals": profile.basalprofile };
             profile.max_daily_basal = basal.maxDailyBasal(inputs);
           //console.error(profile);
         }
