@@ -1240,13 +1240,8 @@ if prompt_yn "" N; then
         ( cd $HOME/src/pi-buttons/src && make && sudo make install && sudo make install_service ) || die "Couldn't install pi-buttons"
         systemctl enable pi-buttons && systemctl restart pi-buttons
         echo "Installing openaps-menu..."
-<<<<<<< HEAD
-        cd $HOME/src && git clone git://github.com/cluckj/openaps-menu.git || (cd openaps-menu && git checkout jon-dev && git pull)
-        cd $HOME/src/openaps-menu && sudo npm install
-=======
         cd $HOME/src && git clone git://github.com/openaps/openaps-menu.git || (cd openaps-menu && git checkout master && git pull)
         cd $HOME/src/openaps-menu && sudo npm install || die "Couldn't install openaps-menu"
->>>>>>> fd53d840e68ef76d7b34684f5546480b6505271d
         cp $HOME/src/openaps-menu/openaps-menu.service /etc/systemd/system/ && systemctl enable openaps-menu
     fi
 
